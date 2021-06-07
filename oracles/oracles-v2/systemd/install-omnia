@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+[[ -z "$ORACLE_DEBUG" ]] || set -x
+
+SCRIPT_DIR=$(cd "${BASH_SOURCE[0]%/*}" && pwd)
+TARGET_DIR=${TARGET_DIR:-/etc/systemd/system}
+SHARE_DIR="${SHARE_PATH:-$SCRIPT_DIR}"
+OMNIA_LIB_PATH=${OMNIA_LIB_PATH:-$SCRIPT_DIR/../omnia/lib}
+OMNIA_CONF_PATH=${OMNIA_CONF_PATH:-$SCRIPT_DIR/../omnia/config}
+
+export SSB_PATH=${SSB_PATH:-$(command -v ssb-server)}
+export GOFER_PATH=${GOFER_PATH:-$(command -v gofer)}
+export SPIRE_PATH=${SPIRE_PATH:-$(command -v spire)}
+export OMNIA_PATH=${OMNIA_PATH:-$(command -v omnia)}
+export SPIRE_CONFIG=/etc/spire.json
+export GOFER_CONFIG=/etc/gofer.json
+export OMNIA_CONFIG=/etc/omnia.conf
+
+usage() {
+  cat >&2 <<EOF
+Usage: install-omnia COMMAND OPTIONS...
+
+Commands:
+  relay       Install Omnia service with default relay config
+  feed          Install Omnia service with default feed config
+  help          Print this message
+
+Options:
+  --from         ADDRESS          Set Ethereum address to use for signing
+  --keystore     PATH             Set Ethereum keystore path
+  --password     PATH             Set Ethereum keystore password file path
+  --network      ETH_NETWORK      Set relay Ethereum network
+  --ssb-caps     CAPS_FILE        Set Scuttlebot caps from file
+  --ssb-external EXTERNAL_ADDRS   Set Scuttlebot external IP/host address
+  --ssb-secret   SECRET_FILE      Install Scuttlebot secret
+  --ssb-gossip   GOSSIP_JSON_FILE Install Scuttlbot gossip.json file
+EOF
+  exit 1
+}
+
+subst() {
+  local name;name="$1.service"
+  local target;target="$TARGET_DIR"/"$name"
+  local restart;restart=$(if [[ -e "$target" ]]; then echo 1; fi)
+
+  # shellcheck disable=SC2016
+  envsubst '
+    $USER
+    $SSB_PATH
+    $OMNIA_PATH $OMNIA_CONFIG
+    $GOFER_PATH $GOFER_CONFIG
+    $SPIRE_PATH $SPIRE_CONFIG
+  ' < "$2" \
+    | sudo tee "$target" >/dev/null
+
+  echo >&2 "$name -> $target"
+
+  systemdCmd+="systemctl enable $name   # Enable auto-start of $1 service at boot
+"
+  if [[ -n "$restart" ]]; then
+    systemdCmd+="systemctl restart $name  # Restart $1 service now
+"
+  else
+    systemdCmd+="systemctl start $name    # Start $1 service now
+"
+  fi
+}
+
+copyOmniaConf() {
+  local savedFrom
+  local updatedConf
+
+  if [[ -f "$OMNIA_CONFIG" ]]; then
+    savedFrom=$(jq '{ethereum,services} | del(.. | nulls)' "$OMNIA_CONFIG")
+  fi
+
+  sudo cp -v "$OMNIA_CONF_PATH/$1" "$OMNIA_CONFIG" >&2
+  sudo chmod u+w "$OMNIA_CONFIG"
+
+  if [[ -n "$savedFrom" ]]; then
+    configUpdates=( ". * $savedFrom" "${configUpdates[@]}" )
+  fi
+
+  for i in "${!configUpdates[@]}"; do
+    updatedConf=$(jq "${configUpdates[$i]}" "$OMNIA_CONFIG")
+    sudo tee "$OMNIA_CONFIG" <<<"$updatedConf" >/dev/null
+  done
+}
+declare -a configUpdates
+
+copySsbConf() {
+  local savedFrom
+  local updatedConf
+  local confDir="$HOME/.ssb"
+  local confPath="$confDir/config"
+
+  mkdir -p "$confDir"
+
+  if [[ -f $confPath ]]; then
+    updatedConf=$(jq . "$confPath")
+  fi
+  [[ -n $updatedConf ]] || updatedConf=$(jq . "$SHARE_DIR/ssb-config.json")
+
+  for i in "${!ssbConfigUpdates[@]}"; do
+    updatedConf=$(jq "${ssbConfigUpdates[$i]}" <<<"$updatedConf")
+  done
+
+  tee "$confPath" <<<"$updatedConf" >/dev/null 2>&1
+
+  if [[ -n "$installSsbSecret" ]]; then
+    cp -iv "$installSsbSecret" "$HOME/.ssb/secret"
+    chmod 600 "$HOME/.ssb/secret"
+  fi
+
+  if [[ -n "$installSsbGossip" ]]; then
+    cp -iv "$installSsbGossip" "$HOME/.ssb/gossip.json"
+  fi
+
+}
+mapfile -t ssbConfigUpdates < <(grep -v "^ *#\|^ *$" "$SHARE_DIR/ssb-config-updates")
+
+copySpireConf() {
+  if [[ ! -f "$SPIRE_CONFIG" ]]; then
+    sudo cp -v "$SHARE_DIR/spire.json" "$SPIRE_CONFIG" >&2
+    sudo chmod u+w "$SPIRE_CONFIG"
+  fi
+
+  for i in "${!spireConfigUpdates[@]}"; do
+    sudo tee "$SPIRE_CONFIG" \
+      <<<"$(jq "${spireConfigUpdates[$i]}" "$SPIRE_CONFIG")" \
+      >/dev/null
+  done
+}
+declare -a spireConfigUpdates
+
+copyGoferConf() {
+  if [[ ! -f "$GOFER_CONFIG" ]]; then
+    sudo cp -v "$SHARE_DIR/gofer.json" "$GOFER_CONFIG" >&2
+    sudo chmod u+w "$GOFER_CONFIG"
+  fi
+
+  for i in "${!goferConfigUpdates[@]}"; do
+    sudo tee "$GOFER_CONFIG" \
+      <<<"$(jq "${goferConfigUpdates[$i]}" "$GOFER_CONFIG")" \
+      >/dev/null
+  done
+}
+declare -a goferConfigUpdates
+
+installConfigs() {
+  copyOmniaConf "$installType.conf"
+  copySsbConf
+  copySpireConf
+  copyGoferConf
+}
+
+installServices() {
+  subst spire-agent "$SHARE_DIR"/spire-agent.service
+  subst gofer-agent "$SHARE_DIR"/gofer-agent.service
+  subst ssb-server "$SHARE_DIR"/ssb-server.service
+  subst omnia "$SHARE_DIR"/omnia.service
+}
+
+
+case "$1" in
+  feed)
+    installType="feed"
+    ;;
+  relayer|relay)
+    installType="relayer"
+    ;;
+  help|--help|-h)
+    usage
+    ;;
+  *)
+    echo >&2 "\"$1\" is not a valid command"
+    usage
+    ;;
+esac
+
+shift
+
+while [[ -n "$1" ]]; do
+  case "$1" in
+    --from)
+      configUpdates+=( ".ethereum.from = \"$2\"" )
+      spireConfigUpdates+=( ".ethereum.from = \"$2\"" )
+      spireConfigUpdates+=( ".feeds += [\"$2\"]" )
+      shift
+      ;;
+    --keystore)
+      configUpdates+=( ".ethereum.keystore = \"$2\"" )
+      spireConfigUpdates+=( ".ethereum.keystore = \"$2\"" )
+      shift
+      ;;
+    --password)
+      configUpdates+=( ".ethereum.password = \"$2\"" )
+      spireConfigUpdates+=( ".ethereum.password = \"$2\"" )
+      shift
+      ;;
+    --network)
+      configUpdates+=( ".ethereum.network = \"$2\"" );shift
+      ;;
+    --no-transport)
+      configUpdates+=( ".transports = []" )
+      ;;
+    --add-transport)
+      configUpdates+=( ".transports += [\"$2\"]" );shift
+      ;;
+    --no-source)
+      configUpdates+=( ".sources = []" )
+      ;;
+    --add-source)
+      configUpdates+=( ".sources += [\"$2\"]" );shift
+      ;;
+    --ssb-external)
+      ssbConfigUpdates+=( ".connections.incoming[\"net\",\"ws\"][].external = \"$2\"" );shift
+      ;;
+    --ssb-caps)
+      ssbConfigUpdates+=( ".caps = $(jq . "$2")" );shift
+      ;;
+    --ssb-secret)
+      installSsbSecret="$2";shift
+      ;;
+    --ssb-gossip)
+      installSsbGossip="$2";shift
+      ;;
+    --help|-h)
+      usage
+      ;;
+    *)
+      echo >&2 "\"$1\" is not a valid option"
+      usage
+      ;;
+  esac
+  shift
+done
+
+installConfigs
+
+installServices
+
+echo >&2 "To (re)start Omnia now (and auto-start on reboot) run:"
+echo     "systemctl daemon-reload  # Reload systemd services"
+echo -n  "$systemdCmd"

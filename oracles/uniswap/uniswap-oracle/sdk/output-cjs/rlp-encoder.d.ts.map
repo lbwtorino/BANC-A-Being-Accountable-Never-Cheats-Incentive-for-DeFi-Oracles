@@ -1,0 +1,1 @@
+{"version":3,"file":"rlp-encoder.d.ts","sourceRoot":"","sources":["../source/rlp-encoder.ts"],"names":[],"mappings":"AACA,oBAAY,OAAO,GAAG,UAAU,GAAG,aAAa,CAAC,OAAO,CAAC,CAAA;AAEzD,wBAAgB,SAAS,CAAC,IAAI,EAAE,OAAO,GAAG,UAAU,CAQnD;AAwED,wBAAgB,SAAS,CAAC,IAAI,EAAE,UAAU,GAAG,OAAO,CAEnD"}

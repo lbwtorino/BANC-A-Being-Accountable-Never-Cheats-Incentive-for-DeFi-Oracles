@@ -1,0 +1,37 @@
+{
+	"name": "@keydonix/uniswap-oracle-sdk-adapter",
+	"description": "Adapter for using @keydonix/uniswap-oracle-sdk with legacy providers like raw JSON-RPC, ethers, web3.js, etc.",
+	"version": "1.0.6",
+	"license": "Unlicense",
+	"repository": {
+		"type": "git",
+		"url": "git@github.com:Keydonix/uniswap-oracle.git"
+	},
+	"main": "./output-cjs/index.js",
+	"exports": {
+		"import": "./output-esm/index.js",
+		"require": "./output-cjs/index.js"
+	},
+	"peerDependencies": {
+		"@keydonix/uniswap-oracle-sdk": "1.x"
+	},
+	"devDependencies": {
+		"@keydonix/uniswap-oracle-sdk": "file:../sdk",
+		"@zoltu/typescript-transformer-append-js-extension": "1.0.1",
+		"ts-node": "8.10.2",
+		"ttypescript": "1.5.10",
+		"typescript": "3.9.3"
+	},
+	"scripts": {
+		"build": "npx ttsc --project ./tsconfig-esm.json && npx ttsc --project ./tsconfig-cjs.json",
+		"watch-esm": "npx ttsc --project ./tsconfig-esm.json --watch",
+		"watch-cjs": "npx ttsc --project ./tsconfig-cjs.json --watch",
+		"prepublishOnly": "cd ../sdk && npm run build && cd ../demo && npm run build && npm run test && cd ../sdk-adapter && npm run build && node --eval \"require('fs').copyFile('../README.md', 'README.md', error => {if(error) throw error})\"",
+		"postpublish": "node --eval \"require('fs').unlink('README.md', error => {if(error) throw error})\""
+	},
+	"files": [
+		"source",
+		"output-esm",
+		"output-cjs"
+	]
+}
