@@ -21,7 +21,7 @@ To test *wrong methodology* oracle penalty, run `./run.sh 4_wrong_methodology`
 
 To test *slow reaction* oracle penalty, run `./run.sh 5_slow_reaction`
 
-To test dispute, run `./run.sh 1_late_report`
+To test dispute, run `./run.sh dispute`
 
 
 ## Contact
