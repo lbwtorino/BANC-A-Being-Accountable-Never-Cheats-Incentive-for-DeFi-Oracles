@@ -1,1 +1,1 @@
-# BANC-A-Being-Accountable-Never-Cheats-Incentive-for-DeFi-Oracles
+# Being Accountable Never Cheats: An Incentive for DeFi Oracles
