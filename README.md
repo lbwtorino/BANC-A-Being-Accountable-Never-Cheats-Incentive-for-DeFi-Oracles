@@ -53,7 +53,7 @@ To test *late report* oracle penalty,
 ```sh
 $ ./run.sh 1_late_report
 ```
-It executes `/run/run_1_late_report.js` javascript test file, including the workflow of `penalty transaction` by punisher (**line 23**),
+It executes [/run/run_1_late_report.js](https://github.com/lbwtorino/BANC-A-Being-Accountable-Never-Cheats-Incentive-for-DeFi-Oracles/blob/master/run/run_1_late_report.js) javascript test file, including the workflow of `penalty transaction` by punisher (**line 23**),
 `dispute transaction` by honest oracle (**line 34**), and `resolution transaction` by watchtower (**line 47**). 
 
 Meanwhile, watchtower uses Ethereum's event & log mechanism to notice the emitted `penalty` and `dispute` events from `Incentive contract`, and captures the required data (**line 24-29** for penalty event and **line 34-42** for dispute event). 
