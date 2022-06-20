@@ -32,15 +32,18 @@ The neccessary prerequisites are:
 
 ## Running test cases
 
+### Step 1 Compile smart contract
 Make sure Ganache is running on your environment. Then, compile `Manifest contract` and `Incentive contract`
 ```sh
 $ truffle compile
 ```
+![Image1](./oracles/0compile.png)
 
+### Step 2 Deploy smart contract
 Before running migrations, replace the (pk, sk) pair for oracle/admin/watchtower/punisher in `/migrations/3_incentive.js`. As shown below, we specify
 Ganache's `account[1]` - `account[4]` to represent these four actors.
 
-![Image1](./oracles/1migration.png)
+![Image2](./oracles/1migration.png)
 
 Then, 
 ```sh
@@ -48,7 +51,9 @@ $ truffle migrate
 ```
 `/migrations/3_incentive.js` is a javaScript files that help to deploy contracts to the Ethereum network.
 
+![Image3](./oracles/2migration.png)
 
+### Step 3 Sending transactions
 To test *late report* oracle penalty,
 ```sh
 $ ./run.sh 1_late_report
@@ -57,6 +62,8 @@ It executes [/run/run_1_late_report.js](https://github.com/lbwtorino/BANC-A-Bein
 `dispute transaction` by honest oracle (**line 34**), and `resolution transaction` by watchtower (**line 47**). 
 
 Meanwhile, watchtower uses Ethereum's event & log mechanism to notice the emitted `penalty` and `dispute` events from `Incentive contract`, and captures the required data (**line 24-29** for penalty event and **line 34-42** for dispute event). 
+
+![Image4](./oracles/3test.png)
 
 In addition, more test cases to punish other misbehavior of oracles can be found in `./run` folder. E.g.,
 
